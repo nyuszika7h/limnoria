@@ -324,7 +324,7 @@ class RSS(callbacks.Plugin):
         for name in announced_feeds:
             feed = self.get_feed(name)
             if not feed:
-                self.log.warning('Feed %s is announced but does not exist.' %
+                self.log.warning('Feed %s is announced but does not exist.',
                         name)
                 continue
             self.update_feed_if_needed(feed)
@@ -465,7 +465,8 @@ class RSS(callbacks.Plugin):
             message isn't sent in the channel itself.
             """
             plugin = irc.getCallback('RSS')
-            invalid_feeds = [x for x in feeds if not plugin.get_feed(x)]
+            invalid_feeds = [x for x in feeds if not plugin.get_feed(x)
+                             and not utils.web.urlRe.match(x)]
             if invalid_feeds:
                 irc.error(format(_('These feeds are unknown: %L'),
                     invalid_feeds), Raise=True)
@@ -477,6 +478,10 @@ class RSS(callbacks.Plugin):
             irc.replySuccess()
             for name in feeds:
                 feed = plugin.get_feed(name)
+                if not feed:
+                    plugin.register_feed_config(name, name)
+                    plugin.register_feed(name, name, True, False)
+                    feed = plugin.get_feed(name)
                 plugin.announce_feed(feed, True)
         add = wrap(add, [('checkChannelCapability', 'op'),
                          many(first('url', 'feedName'))])

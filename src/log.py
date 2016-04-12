@@ -127,16 +127,17 @@ class StdoutStreamHandler(logging.StreamHandler):
 class BetterFileHandler(logging.FileHandler):
     def emit(self, record):
         msg = self.format(record)
-        if not hasattr(types, "UnicodeType"): #if no unicode support...
+        try:
             self.stream.write(msg)
-            self.stream.write(os.linesep)
-        else:
+        except (UnicodeError, TypeError):
             try:
-                self.stream.write(msg)
-                self.stream.write(os.linesep)
-            except UnicodeError:
                 self.stream.write(msg.encode("utf8"))
-                self.stream.write(os.linesep)
+            except (UnicodeError, TypeError):
+                try:
+                    self.stream.write(msg.encode("utf8").decode('ascii', 'replace'))
+                except (UnicodeError, TypeError):
+                    self.stream.write(repr(msg))
+        self.stream.write(os.linesep)
         try:
             self.flush()
         except OSError as e:
@@ -192,7 +193,7 @@ if not os.path.exists(pluginLogDir):
 
 try:
     messagesLogFilename = os.path.join(_logDir, 'messages.log')
-    _handler = BetterFileHandler(messagesLogFilename)
+    _handler = BetterFileHandler(messagesLogFilename, encoding='utf8')
 except EnvironmentError as e:
     raise SystemExit('Error opening messages logfile (%s).  ' \
           'Generally, this is because you are running Supybot in a directory ' \

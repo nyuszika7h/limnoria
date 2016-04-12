@@ -50,15 +50,13 @@ else:
     from HTMLParser import HTMLParser
     from htmlentitydefs import entitydefs
 
-class Title(HTMLParser):
+class Title(utils.web.HtmlToText):
     entitydefs = entitydefs.copy()
     entitydefs['nbsp'] = ' '
-    entitydefs['apos'] = '\''
     def __init__(self):
         self.inTitle = False
         self.inSvg = False
-        self.title = ''
-        HTMLParser.__init__(self)
+        utils.web.HtmlToText.__init__(self)
 
     @property
     def inHtmlTitle(self):
@@ -76,18 +74,9 @@ class Title(HTMLParser):
         elif tag == 'svg':
             self.inSvg = False
 
-    def handle_data(self, data):
+    def append(self, data):
         if self.inHtmlTitle:
-            self.title += data
-
-    def handle_entityref(self, name):
-        if self.inHtmlTitle:
-            if name in self.entitydefs:
-                self.title += self.entitydefs[name]
-
-    def handle_charref(self, name):
-        if self.inHtmlTitle:
-            self.title += (unichr if minisix.PY2 else chr)(int(name))
+            super(Title, self).append(data)
 
 class DelayedIrc:
     def __init__(self, irc):
@@ -111,9 +100,9 @@ def fetch_sandbox(f):
     def newf(self, irc, *args):
         try:
             replies = commands.process(process, self, irc, *args,
-                    timeout=10, heap_size=1024*1024,
+                    timeout=10, heap_size=10*1024*1024,
                     pn=self.name(), cn=f.__name__)
-        except commands.ProcessTimeoutError:
+        except (commands.ProcessTimeoutError, MemoryError):
             raise utils.web.Error(_('Page is too big or the server took '
                     'too much time to answer the request.'))
         else:
@@ -139,9 +128,9 @@ class Web(callbacks.PluginRegexp):
     def noIgnore(self, irc, msg):
         return not self.registryValue('checkIgnored', msg.args[0])
 
-    def getTitle(self, url):
+    def getTitle(self, irc, url, raiseErrors):
         size = conf.supybot.protocols.http.peekSize()
-        text = utils.web.getUrl(url, size=size)
+        (target, text) = utils.web.getUrlTargetAndContent(url, size=size)
         try:
             text = text.decode(utils.web.getEncoding(text) or 'utf8',
                     'replace')
@@ -149,13 +138,23 @@ class Web(callbacks.PluginRegexp):
             pass
         parser = Title()
         if minisix.PY3 and isinstance(text, bytes):
-            irc.error(_('Could not guess the page\'s encoding. (Try '
-                    'installing python-charade.)'), Raise=True)
+            if raiseErrors:
+                irc.error(_('Could not guess the page\'s encoding. (Try '
+                        'installing python-charade.)'), Raise=True)
+            else:
+                return None
         parser.feed(text)
-        title = parser.title
+        parser.close()
+        title = utils.str.normalizeWhitespace(''.join(parser.data).strip())
         if title:
-            title = utils.web.htmlToText(parser.title.strip())
-        return title
+            return (target, title)
+        elif raiseErrors:
+            if len(text) < size:
+                irc.error(_('That URL appears to have no HTML title.'),
+                        Raise=True)
+            else:
+                irc.error(format(_('That URL appears to have no HTML title '
+                                 'within the first %S.'), size), Raise=True)
 
     @fetch_sandbox
     def titleSnarfer(self, irc, msg, match):
@@ -172,9 +171,12 @@ class Web(callbacks.PluginRegexp):
             if r and r.search(url):
                 self.log.debug('Not titleSnarfing %q.', url)
                 return
-            title = self.getTitle(url)
+            r = self.getTitle(irc, url, False)
+            if not r:
+                return
+            (target, title) = r
             if title:
-                domain = utils.web.getDomain(fd.geturl()
+                domain = utils.web.getDomain(target
                         if self.registryValue('snarferShowTargetDomain', channel)
                         else url)
                 s = format(_('Title: %s (at %s)'), title, domain)
@@ -283,17 +285,15 @@ class Web(callbacks.PluginRegexp):
         if not self._checkURLWhitelist(url):
             irc.error("This url is not on the whitelist.")
             return
-        title = self.getTitle(url)
+        r = self.getTitle(irc, url, True)
+        if not r:
+            return
+        (target, title) = r
         if title:
             if not [y for x,y in optlist if x == 'no-filter']:
                 for i in range(1, 4):
                     title = title.replace(chr(i), '')
             irc.reply(title)
-        elif len(text) < size:
-            irc.reply(_('That URL appears to have no HTML title.'))
-        else:
-            irc.reply(format(_('That URL appears to have no HTML title '
-                             'within the first %S.'), size))
     title = wrap(title, [getopts({'no-filter': ''}), 'httpUrl'])
 
     @internationalizeDocstring

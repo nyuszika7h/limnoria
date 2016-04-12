@@ -42,6 +42,9 @@ import supybot.callbacks as callbacks
 from supybot.i18n import PluginInternationalization, internationalizeDocstring
 _ = PluginInternationalization('Later')
 
+class QueueIsFull(Exception):
+    pass
+
 class Later(callbacks.Plugin):
     """Used to do things later; currently, it only allows the sending of
     nick-based notes.  Do note (haha!) that these notes are *not* private
@@ -93,7 +96,7 @@ class Later(callbacks.Plugin):
         try:
             notes = self._notes[nick]
             if maximum and len(notes) >= maximum:
-                raise ValueError
+                raise QueueIsFull()
             else:
                 notes.append((at, whence, text))
         except KeyError:
@@ -170,7 +173,7 @@ class Later(callbacks.Plugin):
         for validnick in validnicks:
             try:
                 self._addNote(validnick, msg.nick, text)
-            except ValueError:
+            except QueueIsFull:
                 full_queues.append(validnick)
         if full_queues:
             irc.error(format(
@@ -259,7 +262,7 @@ class Later(callbacks.Plugin):
                 s = self._formatNote(when, whence, note)
                 irc.reply(s, private=private, prefixNick=not private)
             self._flushNotes()
-            msg.repliedTo = old_repliedto
+            msg.tag('repliedTo', old_repliedto)
 
     def _formatNote(self, when, whence, note):
         return _('Sent %s: <%s> %s') % (self._timestamp(when), whence, note)

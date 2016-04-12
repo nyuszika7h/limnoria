@@ -171,9 +171,9 @@ class Misc(callbacks.Plugin):
             if tokens:
                 # echo [] will get us an empty token set, but there's no need
                 # to log this in that case anyway, it being a nested command.
-                self.log.info('Not replying to %s in %s, not a command.' %
-                    (tokens[0], channel
-                    if channel != irc.nick else _('private')))
+                self.log.info('Not replying to %s in %s, not a command.',
+                    tokens[0], channel
+                    if channel != irc.nick else _('private'))
             if irc.nested:
                 bracketConfig = conf.supybot.commands.nested.brackets
                 brackets = conf.get(bracketConfig, channel)
@@ -347,7 +347,7 @@ class Misc(callbacks.Plugin):
             self.log.info('Couldn\'t get website version: %s', e)
             newest = _('I couldn\'t fetch the newest version '
                      'from the Limnoria repository.')
-        s = _('The current (running) version of this Supybot is %s, '
+        s = _('The current (running) version of this Limnoria is %s, '
               'running on Python %s.  %s') % \
             (conf.version, sys.version.replace('\n', ' '), newest)
         irc.reply(s)
@@ -455,7 +455,7 @@ class Misc(callbacks.Plugin):
                     def f1(s, arg):
                         """Since we can't enqueue match objects into the multiprocessing queue,
                         we'll just wrap the function to return bools."""
-                        if arg.search(s) is not None:
+                        if process(arg.search, s, timeout=0.1) is not None:
                             return True
                         else:
                             return False

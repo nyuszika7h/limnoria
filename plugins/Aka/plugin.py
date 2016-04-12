@@ -366,7 +366,15 @@ def findBiggestAt(alias):
     else:
         return 0
 
-AkaDB = plugins.DB('Aka', available_db)
+if 'sqlite3' in conf.supybot.databases() and 'sqlite3' in available_db:
+    AkaDB = SQLiteAkaDB
+elif 'sqlalchemy' in conf.supybot.databases() and 'sqlalchemy' in available_db:
+    log.warning('Aka\'s only enabled database engine is SQLAlchemy, which '
+            'is deprecated. Please consider adding \'sqlite3\' to '
+            'supybot.databases (and/or install sqlite3).')
+    AkaDB = SqlAlchemyAkaDB
+else:
+    raise plugins.NoSuitableDatabase(['sqlite3', 'sqlalchemy'])
 
 class Aka(callbacks.Plugin):
     """Aka is the improved version of the Alias plugin. It stores akas outside
@@ -377,7 +385,9 @@ class Aka(callbacks.Plugin):
     def __init__(self, irc):
         self.__parent = super(Aka, self)
         self.__parent.__init__(irc)
-        self._db = AkaDB()
+        # "sqlalchemy" is only for backward compatibility
+        filename = conf.supybot.directories.data.dirize('Aka.sqlalchemy.db')
+        self._db = AkaDB(filename)
 
     def isCommandMethod(self, name):
         args = name.split(' ')
@@ -743,12 +753,14 @@ class Aka(callbacks.Plugin):
             if 'keys' in dict(optlist):
                 # Strange, aka_list is a list of one length tuples
                 s = [k[0] for k in aka_list]
+                oneToOne = True
             else:
                 aka_values = [self._db.get_alias(channel, aka) for aka in
                               aka_list]
                 s = ('{0}: "{1}"'.format(ircutils.bold(k), v) for (k, v) in
                     zip(aka_list, aka_values))
-            irc.replies(s)
+                oneToOne = None
+            irc.replies(s, oneToOne=oneToOne)
         else:
             irc.error(_("No Akas found."))
     list = wrap(list, [getopts({'channel': 'channel', 'keys': '', 'locked': '',

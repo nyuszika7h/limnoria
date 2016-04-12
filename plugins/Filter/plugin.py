@@ -62,7 +62,7 @@ class Filter(callbacks.Plugin):
         self.outFilters = ircutils.IrcDict()
 
     def outFilter(self, irc, msg):
-        if msg.command == 'PRIVMSG':
+        if msg.command in ('PRIVMSG', 'NOTICE'):
             if msg.args[0] in self.outFilters:
                 if ircmsgs.isAction(msg):
                     s = ircmsgs.unAction(msg)
@@ -393,7 +393,12 @@ class Filter(callbacks.Plugin):
 
         Returns <text> with each character randomly colorized.
         """
+        if minisix.PY2:
+            text = text.decode('utf-8')
+        text = ircutils.stripColor(text)
         L = [self._color(c) for c in text]
+        if minisix.PY2:
+            L = [c.encode('utf-8') for c in L]
         irc.reply('%s%s' % (''.join(L), '\x03'))
     colorize = wrap(colorize, ['text'])
 
@@ -405,6 +410,7 @@ class Filter(callbacks.Plugin):
         """
         if minisix.PY2:
             text = text.decode('utf-8')
+        text = ircutils.stripColor(text)
         colors = utils.iter.cycle(['05', '04', '07', '08', '09', '03', '11',
                                    '10', '12', '02', '06', '13'])
         L = [self._color(c, fg=next(colors)) for c in text]
